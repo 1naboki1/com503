@@ -2,6 +2,7 @@ from flask import Flask, jsonify, render_template, url_for, redirect, request, s
 from pymongo import MongoClient
 from weather_service import WeatherService
 from auth_config import *
+from token_manager import TokenManager
 import os
 from datetime import datetime, timedelta
 import threading
@@ -11,6 +12,7 @@ from oauthlib.oauth2 import WebApplicationClient
 import requests
 from functools import wraps
 import json
+import secrets
 
 # Initialize logging
 logger = setup_logger('app', 'app.log')
@@ -41,6 +43,9 @@ def create_app():
     # Allow insecure transport in development
     os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
+    # Initialize token manager
+    token_manager = TokenManager()
+
     # OAuth 2 client setup
     client = WebApplicationClient(GOOGLE_CLIENT_ID)
 
@@ -66,10 +71,27 @@ def create_app():
     def login_required(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            if 'user' not in session:
+            auth_result = is_authenticated()
+            logger.info(f"Auth check for {request.path}: {auth_result}")
+            if not auth_result:
+                logger.info(f"User not authenticated, redirecting to login. Session data: {session.get('user')}")
                 return redirect(url_for('login'))
             return f(*args, **kwargs)
         return decorated_function
+
+    def is_authenticated():
+        """Check if user is authenticated"""
+        if 'user' not in session:
+            logger.info("No user in session")
+            return False
+        
+        user = db.users.find_one({
+            'google_id': session['user']['id'],
+            'session_token': session['user'].get('session_token')
+        })
+        
+        logger.info(f"Authentication check result: {user is not None}")
+        return user is not None
 
     def get_google_provider_cfg():
         try:
@@ -163,7 +185,7 @@ def create_app():
             
             token_url, headers, body = client.prepare_token_request(
                 token_endpoint,
-                authorization_response=request.url,
+                authorization_response=request.url.replace('http://', 'https://'),
                 redirect_url=callback_uri,
                 code=code
             )
@@ -180,48 +202,90 @@ def create_app():
             logger.info(f"Callback - Token response status: {token_response.status_code}")
             logger.info(f"Callback - Token response: {token_response.text}")
             
+            if token_response.status_code != 200:
+                logger.error(f"Token request failed: {token_response.text}")
+                return "Authentication failed.", 400
+
+            # Parse the tokens
+            tokens = token_response.json()
             client.parse_request_body_response(token_response.text)
             
+            # Get user info
             userinfo_endpoint = google_provider_cfg["userinfo_endpoint"]
             uri, headers, body = client.add_token(userinfo_endpoint)
             userinfo_response = requests.get(uri, headers=headers)
+            
+            if userinfo_response.status_code != 200:
+                logger.error(f"Userinfo request failed: {userinfo_response.text}")
+                return "Failed to get user info.", 400
+
             userinfo = userinfo_response.json()
+            logger.info(f"Callback - User info received: {userinfo}")
             
             if userinfo.get("email_verified"):
+                refresh_token = tokens.get('refresh_token')
+                session_token = secrets.token_urlsafe(32)
+                
                 user_data = {
-                    'id': userinfo["sub"],
+                    'google_id': userinfo["sub"],
                     'email': userinfo["email"],
-                    'name': userinfo.get("given_name", "User")
+                    'name': userinfo.get("given_name", "User"),
+                    'session_token': session_token,
+                    'last_login': datetime.utcnow()
                 }
                 
-                session['user'] = user_data
+                if refresh_token:
+                    # Encrypt refresh token
+                    encrypted_refresh_token = token_manager.encrypt_token(refresh_token)
+                    user_data['refresh_token'] = encrypted_refresh_token
                 
-                # Update database
-                db.users.update_one(
-                    {'google_id': user_data['id']},
+                # Update or insert user data
+                result = db.users.update_one(
+                    {'google_id': user_data['google_id']},
                     {
-                        '$set': {
-                            'email': user_data['email'],
-                            'name': user_data['name'],
-                            'last_login': datetime.utcnow()
+                        '$set': user_data,
+                        '$setOnInsert': {
+                            'created_at': datetime.utcnow()
                         }
                     },
                     upsert=True
                 )
+                logger.info(f"Callback - Database update result: {result.modified_count} documents modified")
+                
+                # Set session data
+                session['user'] = {
+                    'id': userinfo["sub"],
+                    'email': userinfo["email"],
+                    'name': userinfo.get("given_name", "User"),
+                    'session_token': session_token
+                }
+                logger.info("Callback - Session data set successfully")
                 
                 return redirect(url_for('home'))
             else:
+                logger.error("Email not verified by Google")
                 return "Email not verified by Google.", 400
                 
         except Exception as e:
-            logger.error(f"Login error: {str(e)}")
+            logger.error(f"Login error: {str(e)}", exc_info=True)
             return "Login failed.", 500
 
     @app.route('/logout')
     def logout():
         """Handle logout"""
-        session.clear()
-        return redirect(url_for('home'))
+        try:
+            if 'user' in session:
+                # Invalidate session token in database
+                db.users.update_one(
+                    {'google_id': session['user']['id']},
+                    {'$unset': {'session_token': ""}}
+                )
+            session.clear()
+            return redirect(url_for('login'))
+        except Exception as e:
+            logger.error(f"Logout error: {str(e)}")
+            session.clear()
+            return redirect(url_for('login'))
 
     @app.route('/')
     @login_required
@@ -277,6 +341,13 @@ def create_app():
         except Exception as e:
             logger.error(f"Error handling preferences: {str(e)}")
             return jsonify({'error': 'Internal server error'}), 500
+
+    @app.route('/check-auth')
+    def check_auth():
+        """Check if user is authenticated and refresh token if needed"""
+        if not is_authenticated():
+            return jsonify({'authenticated': False}), 401
+        return jsonify({'authenticated': True})
 
     # Start background task if not in debug mode or if we are in the main thread
     if not app.debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
