@@ -1,35 +1,49 @@
 import requests
 from datetime import datetime, timedelta
 import json
-from typing import Dict, List
+from typing import Dict, List, Optional
 from logging_config import setup_logger
+from pymongo.collection import Collection
+from pymongo.database import Database
 
 class WeatherService:
-    def __init__(self, db):
+    def __init__(self, db: Database):
         self.api_url = 'https://warnungen.zamg.at/wsapp/api/getWarnstatus'
         self.db = db
         self.logger = setup_logger('weather_service', 'weather_service.log')
-        # Ensure indexes for better query performance
         self.setup_db_indexes()
 
-    def setup_db_indexes(self):
+    def setup_db_indexes(self) -> None:
         """Setup MongoDB indexes for better query performance"""
         try:
-            # Index for warning_id
+            # Current warnings indexes
             self.db.current_warnings.create_index("warning_id", unique=True)
-            # Index for timestamps
             self.db.current_warnings.create_index([("start_time", 1), ("end_time", 1)])
-            # Index for historical data
+            self.db.current_warnings.create_index([("warning_type", 1)])
+            self.db.current_warnings.create_index([("warning_level", 1)])
+            
+            # Historical warnings indexes
             self.db.historical_warnings.create_index([("created_at", 1)])
             self.db.historical_warnings.create_index("warning_id")
+            self.db.historical_warnings.create_index([("warning_type", 1)])
+            
+            # User preferences indexes
+            self.db.user_preferences.create_index("user_id", unique=True)
+            
             self.logger.info("Database indexes created successfully")
         except Exception as e:
             self.logger.error(f"Error creating database indexes: {str(e)}")
+            raise
 
-    def fetch_warnings(self) -> Dict:
+    def fetch_warnings(self) -> Optional[Dict]:
+        """Fetch warnings from ZAMG API"""
         try:
             self.logger.info("Fetching warnings from ZAMG API")
-            response = requests.get(self.api_url, headers={'accept': 'application/json'})
+            response = requests.get(
+                self.api_url,
+                headers={'accept': 'application/json'},
+                timeout=10
+            )
             response.raise_for_status()
             
             warnings = response.json()
@@ -38,11 +52,19 @@ class WeatherService:
         except requests.RequestException as e:
             self.logger.error(f"Error fetching warnings: {str(e)}")
             return None
+        except json.JSONDecodeError as e:
+            self.logger.error(f"Error decoding JSON response: {str(e)}")
+            return None
 
-    def process_warning(self, warning_feature: Dict) -> Dict:
+    def process_warning(self, warning_feature: Dict) -> Optional[Dict]:
+        """Process a single warning feature from the API response"""
         try:
             properties = warning_feature.get('properties', {})
             warning_id = properties.get('warnid')
+            
+            if not warning_id:
+                self.logger.warning("Warning ID missing in feature")
+                return None
             
             warning_types = {
                 1: "storm", 2: "rain", 3: "snow", 4: "black_ice",
@@ -53,8 +75,12 @@ class WeatherService:
                 1: "yellow", 2: "orange", 3: "red"
             }
             
-            start_time = datetime.fromtimestamp(int(properties.get('start', 0)))
-            end_time = datetime.fromtimestamp(int(properties.get('end', 0)))
+            try:
+                start_time = datetime.fromtimestamp(int(properties.get('start', 0)))
+                end_time = datetime.fromtimestamp(int(properties.get('end', 0)))
+            except (ValueError, TypeError) as e:
+                self.logger.error(f"Error processing timestamps for warning {warning_id}: {str(e)}")
+                return None
             
             return {
                 'warning_id': warning_id,
@@ -64,7 +90,7 @@ class WeatherService:
                 'end_time': end_time,
                 'geometry': warning_feature.get('geometry'),
                 'municipalities': properties.get('gemeinden', []),
-                'raw_data': warning_feature,  # Store raw data for future reference
+                'raw_data': warning_feature,
                 'created_at': datetime.utcnow(),
                 'updated_at': datetime.utcnow()
             }
@@ -72,10 +98,11 @@ class WeatherService:
             self.logger.error(f"Error processing warning: {str(e)}")
             return None
 
-    def save_warnings(self, warnings_data: Dict):
+    def save_warnings(self, warnings_data: Dict) -> bool:
+        """Save warnings to database and archive old warnings"""
         if not warnings_data or 'features' not in warnings_data:
             self.logger.warning("No valid warnings data to save")
-            return
+            return False
         
         try:
             current_time = datetime.utcnow()
@@ -88,41 +115,49 @@ class WeatherService:
                     processed_warnings.append(processed_warning)
             
             if processed_warnings:
-                # Archive existing warnings before updating
+                # Archive existing warnings
                 existing_warnings = list(self.db.current_warnings.find({}))
                 if existing_warnings:
                     self.db.historical_warnings.insert_many(existing_warnings)
-                    self.logger.info(f"Archived {len(existing_warnings)} warnings to historical collection")
+                    self.logger.info(f"Archived {len(existing_warnings)} warnings")
                 
-                # Update current warnings using upsert
-                for warning in processed_warnings:
-                    self.db.current_warnings.update_one(
-                        {'warning_id': warning['warning_id']},
-                        {'$set': warning},
-                        upsert=True
-                    )
+                # Update current warnings
+                self.db.current_warnings.delete_many({})  # Clear current warnings
+                self.db.current_warnings.insert_many(processed_warnings)
+                self.logger.info(f"Saved {len(processed_warnings)} new warnings")
                 
-                self.logger.info(f"Successfully saved {len(processed_warnings)} warnings")
-                
-                # Clean up old historical data (keep last 30 days)
+                # Clean up old historical data
                 cleanup_date = current_time - timedelta(days=30)
                 result = self.db.historical_warnings.delete_many({
                     'created_at': {'$lt': cleanup_date}
                 })
                 self.logger.info(f"Cleaned up {result.deleted_count} old historical warnings")
                 
+                return True
         except Exception as e:
             self.logger.error(f"Error saving warnings to database: {str(e)}")
+            return False
+        
+        return False
 
-    def get_active_warnings(self) -> List[Dict]:
+    def get_active_warnings(self, user_id: Optional[str] = None) -> List[Dict]:
+        """Get active warnings, optionally filtered by user preferences"""
         try:
             current_time = datetime.utcnow()
+            query = {
+                'start_time': {'$lte': current_time},
+                'end_time': {'$gte': current_time}
+            }
+            
+            # Apply user preferences if user_id is provided
+            if user_id:
+                user_prefs = self.db.user_preferences.find_one({'user_id': user_id})
+                if user_prefs and 'warning_types' in user_prefs:
+                    query['warning_type'] = {'$in': user_prefs['warning_types']}
+            
             warnings = list(self.db.current_warnings.find(
-                {
-                    'start_time': {'$lte': current_time},
-                    'end_time': {'$gte': current_time}
-                },
-                {'_id': 0, 'raw_data': 0}  # Exclude raw data from response
+                query,
+                {'_id': 0, 'raw_data': 0}
             ))
             self.logger.info(f"Found {len(warnings)} active warnings")
             return warnings
@@ -130,16 +165,42 @@ class WeatherService:
             self.logger.error(f"Error fetching active warnings: {str(e)}")
             return []
 
-    def get_historical_warnings(self, days: int = 7) -> List[Dict]:
-        """Retrieve historical warnings for the specified number of days"""
+    def get_historical_warnings(self, days: int = 7, user_id: Optional[str] = None) -> List[Dict]:
+        """Get historical warnings for the specified number of days"""
         try:
             start_date = datetime.utcnow() - timedelta(days=days)
+            query = {'created_at': {'$gte': start_date}}
+            
+            # Apply user preferences if user_id is provided
+            if user_id:
+                user_prefs = self.db.user_preferences.find_one({'user_id': user_id})
+                if user_prefs and 'warning_types' in user_prefs:
+                    query['warning_type'] = {'$in': user_prefs['warning_types']}
+            
             warnings = list(self.db.historical_warnings.find(
-                {'created_at': {'$gte': start_date}},
+                query,
                 {'_id': 0, 'raw_data': 0}
             ).sort('created_at', -1))
+            
             self.logger.info(f"Retrieved {len(warnings)} historical warnings")
             return warnings
         except Exception as e:
             self.logger.error(f"Error fetching historical warnings: {str(e)}")
             return []
+
+    def update_user_preferences(self, user_id: str, preferences: Dict) -> bool:
+        """Update user preferences for warning types"""
+        try:
+            self.db.user_preferences.update_one(
+                {'user_id': user_id},
+                {'$set': {
+                    'warning_types': preferences.get('warning_types', []),
+                    'updated_at': datetime.utcnow()
+                }},
+                upsert=True
+            )
+            self.logger.info(f"Updated preferences for user {user_id}")
+            return True
+        except Exception as e:
+            self.logger.error(f"Error updating user preferences: {str(e)}")
+            return False
