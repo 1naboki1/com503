@@ -4,13 +4,13 @@ services:
   web:
     build: .
     ports:
-      - "5000:5000"  # Adjust port as needed for your Python server
+      - "5000:5000"
     environment:
       - MONGODB_URI=mongodb://mongodb:27017/myapp
     depends_on:
       - mongodb
     volumes:
-      - ./app:/app  # Mount your application code
+      - ./app:/app  # This mounts your local app directory to the container
     networks:
       - app-network
 
