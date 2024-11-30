@@ -1,3 +1,7 @@
 logs/
-nginx/ssl/
 .env
+*__pycache__
+*.pyc
+.DS_Store
+nginx/ssl/*
+!nginx/ssl/.gitkeep
