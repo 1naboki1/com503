@@ -2,7 +2,7 @@
 
 ## Description
 
-This project is a Python application that can be run using Docker.
+This project is a Python application that can be run using Docker. It provides weather warnings and user preferences management through a web interface.
 
 ## Prerequisites
 
@@ -16,6 +16,13 @@ This project is a Python application that can be run using Docker.
     git clone <repository-url>
     cd <repository-directory>
     ```
+
+2. Copy the example environment file and update it with your credentials:
+    ```sh
+    cp .env.example .env
+    ```
+
+3. Update the `.env` file with your Google OAuth credentials and MongoDB credentials.
 
 ## Running the Application
 
