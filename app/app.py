@@ -78,6 +78,16 @@ def update_warnings():
         logger.error(f"Error updating warnings: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
 
+@app.route('/api/warnings/historical', methods=['GET'])
+def get_historical_warnings():
+    try:
+        days = request.args.get('days', default=7, type=int)
+        warnings = weather_service.get_historical_warnings(days)
+        return jsonify(warnings)
+    except Exception as e:
+        logger.error(f"Error getting historical warnings: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
+
 if __name__ == '__main__':
     try:
         # Start the background task for periodic updates
