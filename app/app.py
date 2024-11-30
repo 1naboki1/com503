@@ -46,10 +46,15 @@ def create_app():
 
     # MongoDB setup
     try:
-        mongodb_uri = os.environ.get('MONGODB_URI', 'mongodb://mongodb:27017/myapp')
+        mongodb_uri = os.environ.get('MONGODB_URI')
+        if not mongodb_uri:
+            logger.critical("MongoDB URI not provided in environment variables")
+            raise ValueError("MongoDB URI is required")
+            
         db_client = MongoClient(mongodb_uri)
         db = db_client.myapp
-        db_client.server_info()  # Test connection
+        # Test connection
+        db_client.admin.command('ping')
         logger.info("Successfully connected to MongoDB")
     except Exception as e:
         logger.critical(f"Failed to connect to MongoDB: {str(e)}")
