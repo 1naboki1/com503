@@ -43,12 +43,6 @@ def create_app():
     # Allow insecure transport in development
     os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
-    # Initialize token manager
-    token_manager = TokenManager()
-
-    # OAuth 2 client setup
-    client = WebApplicationClient(GOOGLE_CLIENT_ID)
-
     # MongoDB setup
     try:
         mongodb_uri = os.environ.get('MONGODB_URI')
@@ -64,6 +58,28 @@ def create_app():
     except Exception as e:
         logger.critical(f"Failed to connect to MongoDB: {str(e)}")
         raise
+
+    # Initialize token manager
+    token_manager = TokenManager(
+        logger=logger,  # Pass the already initialized logger
+        secret_key=os.environ.get('ENCRYPTION_KEY')
+    )
+
+    # Start token refresh thread
+    google_config = {
+        'client_id': GOOGLE_CLIENT_ID,
+        'client_secret': GOOGLE_CLIENT_SECRET
+    }
+    token_manager.start_token_refresh_thread(db, google_config)
+
+    # Add a cleanup function
+    @app.teardown_appcontext
+    def cleanup(error):
+        """Cleanup resources"""
+        token_manager.stop_token_refresh_thread()
+
+    # OAuth 2 client setup
+    client = WebApplicationClient(GOOGLE_CLIENT_ID)
 
     # Initialize weather service
     weather_service = WeatherService(db)
