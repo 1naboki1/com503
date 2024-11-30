@@ -10,7 +10,8 @@ services:
     depends_on:
       - mongodb
     volumes:
-      - ./app:/app  # This mounts your local app directory to the container
+      - ./app:/app
+      - ./logs:/app/logs  # Mount logs directory
     networks:
       - app-network
 

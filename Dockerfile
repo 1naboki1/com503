@@ -6,9 +6,11 @@ COPY requirements.txt .
 
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Create templates directory and copy files
+# Create logs directory
+RUN mkdir -p logs
+
 COPY app/templates ./templates
-COPY app/app.py .
+COPY app/*.py .
 
 EXPOSE 5000
 

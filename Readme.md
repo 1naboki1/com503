@@ -44,6 +44,8 @@ If you want to develop and test the application locally without Docker, follow t
 
 4. The application will be accessible at `http://localhost:5000`.
 
-## License
+## Excluding Logs from Git
 
-This project is licensed under the MIT License.
+To exclude the `logs` folder from being tracked by Git, add the following line to your `.gitignore` file:
+```plaintext
+logs/
