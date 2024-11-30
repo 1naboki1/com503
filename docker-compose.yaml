@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    ports:
+      - "5000:5000"  # Adjust port as needed for your Python server
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/myapp
+    depends_on:
+      - mongodb
+    volumes:
+      - ./app:/app  # Mount your application code
+    networks:
+      - app-network
+
+  mongodb:
+    image: mongo:latest
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - app-network
+
+volumes:
+  mongodb_data:
+
+networks:
+  app-network:
+    driver: bridge
