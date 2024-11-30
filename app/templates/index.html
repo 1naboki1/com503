@@ -1,222 +1,264 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>InfoCal</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            font-family: Arial, sans-serif;
-            background-color: #f0f0f0;
-        }
-
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0.5rem 1rem;
-            background-color: #4a90e2;
-            color: white;
-        }
-
-        .logo {
-            font-size: 1.5rem;
-            font-weight: bold;
-        }
-
-        .user-actions {
-            display: flex;
-            gap: 1rem;
-        }
-
-        .main-content {
-            display: flex;
-            padding: 1rem;
-            gap: 1rem;
-            min-height: calc(100vh - 120px);
-        }
-
-        .panel {
-            background: white;
-            border-radius: 8px;
-            padding: 1rem;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        .left-panel {
-            flex: 1;
-        }
-
-        .center-panel {
-            flex: 2;
-        }
-
-        .right-panel {
-            flex: 1;
-        }
-
-        .map {
-            height: 200px;
-            background-color: #ddd;
-            margin: 1rem 0;
-            border-radius: 4px;
-        }
-
-        .location-input {
-            width: 100%;
-            padding: 0.5rem;
-            margin-bottom: 0.5rem;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-        }
-
-        .add-location-btn {
-            background-color: #4a90e2;
-            color: white;
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-
-        .location-list {
-            margin-top: 1rem;
-        }
-
-        .location-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0.5rem 0;
-            border-bottom: 1px solid #eee;
-        }
-
-        .delete-btn {
-            background-color: #ff4444;
-            color: white;
-            border: none;
-            padding: 0.25rem 0.5rem;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-
-        .settings-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0.5rem 0;
-            border-bottom: 1px solid #eee;
-        }
-
-        .checkbox {
-            width: 18px;
-            height: 18px;
-        }
-
-        .footer {
-            background-color: #4a90e2;
-            color: white;
-            padding: 1rem;
-            text-align: center;
-            position: fixed;
-            bottom: 0;
-            width: 100%;
-        }
-
-        .footer a {
-            color: white;
-            text-decoration: none;
-            margin: 0 1rem;
-        }
-
-        h3 {
-            margin-top: 0;
-            margin-bottom: 1rem;
-            color: #333;
-        }
-    </style>
+    <title>InfoCal - Weather Warnings</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
-<body>
-    <div class="header">
-        <div class="logo">InfoCal</div>
-        <div class="user-actions">
-            <div class="settings-icon">⚙️</div>
-            <div class="profile-icon">👤</div>
-        </div>
-    </div>
-
-    <div class="main-content">
-        <div class="panel left-panel">
-            <h3>Karte und Orte</h3>
-            <input type="text" class="location-input" placeholder="Neuen Ort hinzufügen...">
-            <button class="add-location-btn">Ort hinzufügen</button>
-            <div class="map">[Karte hier]</div>
-            <div class="location-list">
-                <div class="location-item">
-                    <span>Wien</span>
-                    <button class="delete-btn">Löschen</button>
+<body class="bg-gray-50">
+    <!-- Navigation Bar -->
+    <nav class="bg-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex justify-between h-16">
+                <div class="flex">
+                    <div class="flex-shrink-0 flex items-center">
+                        <span class="text-2xl font-bold text-blue-600">InfoCal</span>
+                    </div>
                 </div>
-                <div class="location-item">
-                    <span>Graz</span>
-                    <button class="delete-btn">Löschen</button>
-                </div>
-                <div class="location-item">
-                    <span>Salzburg</span>
-                    <button class="delete-btn">Löschen</button>
+                <div class="flex items-center">
+                    <div class="ml-4 flex items-center md:ml-6">
+                        <div class="relative">
+                            <div class="flex items-center space-x-4">
+                                <span class="text-gray-700">{{ user.name }}</span>
+                                <button class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium">
+                                    <a href="{{ url_for('logout') }}">Logout</a>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
+    </nav>
 
-        <div class="panel center-panel">
-            <h3>Kalender</h3>
-            <div>[Kalender-UI hier]</div>
-        </div>
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div class="grid grid-cols-12 gap-6">
+            <!-- Left Panel - Map and Locations -->
+            <div class="col-span-12 md:col-span-3">
+                <div class="bg-white shadow rounded-lg p-4">
+                    <h2 class="text-lg font-semibold text-gray-700 mb-4">Locations</h2>
+                    
+                    <!-- Add Location Form -->
+                    <div class="mb-4">
+                        <div class="flex gap-2">
+                            <input type="text" id="location-input" 
+                                   class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm"
+                                   placeholder="Enter location">
+                            <button id="add-location" 
+                                    class="bg-green-500 text-white px-3 py-2 rounded-md hover:bg-green-600">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
+                    </div>
 
-        <div class="panel right-panel">
-            <h3>Einstellungen</h3>
-            <div class="settings">
-                <div class="settings-item">
-                    <span>🌐 Alle</span>
-                    <input type="checkbox" class="checkbox" checked>
+                    <!-- Location List -->
+                    <div id="location-list" class="space-y-2">
+                        <!-- Location items will be added here dynamically -->
+                    </div>
                 </div>
-                <div class="settings-item">
-                    <span>💨 Wind</span>
-                    <input type="checkbox" class="checkbox">
+
+                <!-- Settings Panel -->
+                <div class="bg-white shadow rounded-lg p-4 mt-6">
+                    <h2 class="text-lg font-semibold text-gray-700 mb-4">Warning Types</h2>
+                    <div class="space-y-3">
+                        <label class="flex items-center space-x-3">
+                            <input type="checkbox" class="form-checkbox h-5 w-5 text-blue-600" name="warning-type" value="all">
+                            <span class="text-gray-700">🌐 All Warnings</span>
+                        </label>
+                        <label class="flex items-center space-x-3">
+                            <input type="checkbox" class="form-checkbox h-5 w-5 text-blue-600" name="warning-type" value="wind">
+                            <span class="text-gray-700">💨 Wind</span>
+                        </label>
+                        <label class="flex items-center space-x-3">
+                            <input type="checkbox" class="form-checkbox h-5 w-5 text-blue-600" name="warning-type" value="rain">
+                            <span class="text-gray-700">🌧 Rain</span>
+                        </label>
+                        <label class="flex items-center space-x-3">
+                            <input type="checkbox" class="form-checkbox h-5 w-5 text-blue-600" name="warning-type" value="snow">
+                            <span class="text-gray-700">❄️ Snow</span>
+                        </label>
+                        <label class="flex items-center space-x-3">
+                            <input type="checkbox" class="form-checkbox h-5 w-5 text-blue-600" name="warning-type" value="ice">
+                            <span class="text-gray-700">🧊 Black Ice</span>
+                        </label>
+                        <label class="flex items-center space-x-3">
+                            <input type="checkbox" class="form-checkbox h-5 w-5 text-blue-600" name="warning-type" value="thunderstorm">
+                            <span class="text-gray-700">⛈ Thunderstorm</span>
+                        </label>
+                        <label class="flex items-center space-x-3">
+                            <input type="checkbox" class="form-checkbox h-5 w-5 text-blue-600" name="warning-type" value="heat">
+                            <span class="text-gray-700">🌡 Heat</span>
+                        </label>
+                        <label class="flex items-center space-x-3">
+                            <input type="checkbox" class="form-checkbox h-5 w-5 text-blue-600" name="warning-type" value="cold">
+                            <span class="text-gray-700">🥶 Cold</span>
+                        </label>
+                    </div>
                 </div>
-                <div class="settings-item">
-                    <span>🌧 Regen</span>
-                    <input type="checkbox" class="checkbox">
+            </div>
+
+            <!-- Center Panel - Active Warnings -->
+            <div class="col-span-12 md:col-span-6">
+                <div class="bg-white shadow rounded-lg p-4">
+                    <h2 class="text-lg font-semibold text-gray-700 mb-4">Active Warnings</h2>
+                    <div id="active-warnings" class="space-y-4">
+                        <!-- Warning cards will be added here dynamically -->
+                    </div>
                 </div>
-                <div class="settings-item">
-                    <span>❄️ Schnee</span>
-                    <input type="checkbox" class="checkbox">
-                </div>
-                <div class="settings-item">
-                    <span>🧊 Glatteis</span>
-                    <input type="checkbox" class="checkbox">
-                </div>
-                <div class="settings-item">
-                    <span>⛈ Gewitter</span>
-                    <input type="checkbox" class="checkbox">
-                </div>
-                <div class="settings-item">
-                    <span>🔥 Hitze</span>
-                    <input type="checkbox" class="checkbox">
-                </div>
-                <div class="settings-item">
-                    <span>🥶 Kälte</span>
-                    <input type="checkbox" class="checkbox">
+            </div>
+
+            <!-- Right Panel - Historical Warnings -->
+            <div class="col-span-12 md:col-span-3">
+                <div class="bg-white shadow rounded-lg p-4">
+                    <h2 class="text-lg font-semibold text-gray-700 mb-4">Historical Warnings</h2>
+                    <div id="historical-warnings" class="space-y-4">
+                        <!-- Historical warnings will be added here dynamically -->
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="footer">
-        <a href="#">Impressum</a>
-        <a href="#">FAQ</a>
-        <a href="#">Rechtliche Hinweise</a>
-    </div>
+    <!-- JavaScript for Dynamic Content -->
+    <script>
+        // Function to fetch and display active warnings
+        async function fetchActiveWarnings() {
+            try {
+                const response = await fetch('/api/warnings');
+                const warnings = await response.json();
+                const warningsContainer = document.getElementById('active-warnings');
+                warningsContainer.innerHTML = '';
+
+                warnings.forEach(warning => {
+                    const card = createWarningCard(warning);
+                    warningsContainer.appendChild(card);
+                });
+            } catch (error) {
+                console.error('Error fetching active warnings:', error);
+            }
+        }
+
+        // Function to fetch and display historical warnings
+        async function fetchHistoricalWarnings() {
+            try {
+                const response = await fetch('/api/warnings/historical');
+                const warnings = await response.json();
+                const warningsContainer = document.getElementById('historical-warnings');
+                warningsContainer.innerHTML = '';
+
+                warnings.forEach(warning => {
+                    const card = createHistoricalWarningCard(warning);
+                    warningsContainer.appendChild(card);
+                });
+            } catch (error) {
+                console.error('Error fetching historical warnings:', error);
+            }
+        }
+
+        // Function to create a warning card
+        function createWarningCard(warning) {
+            const div = document.createElement('div');
+            div.className = 'bg-white border border-gray-200 rounded-lg p-4 shadow-sm';
+            
+            const levelColors = {
+                'yellow': 'bg-yellow-100 text-yellow-800',
+                'orange': 'bg-orange-100 text-orange-800',
+                'red': 'bg-red-100 text-red-800'
+            };
+
+            div.innerHTML = `
+                <div class="flex justify-between items-start">
+                    <div class="flex-1">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${levelColors[warning.warning_level] || 'bg-gray-100 text-gray-800'}">
+                            ${warning.warning_level.toUpperCase()}
+                        </span>
+                        <h3 class="mt-2 text-lg font-medium text-gray-900">${warning.warning_type}</h3>
+                    </div>
+                </div>
+                <div class="mt-2 text-sm text-gray-600">
+                    <p>Start: ${new Date(warning.start_time).toLocaleString()}</p>
+                    <p>End: ${new Date(warning.end_time).toLocaleString()}</p>
+                </div>
+            `;
+            return div;
+        }
+
+        // Function to create a historical warning card
+        function createHistoricalWarningCard(warning) {
+            const div = document.createElement('div');
+            div.className = 'bg-gray-50 border border-gray-200 rounded-lg p-3';
+            div.innerHTML = `
+                <div class="text-sm">
+                    <p class="font-medium text-gray-900">${warning.warning_type}</p>
+                    <p class="text-gray-600">${new Date(warning.created_at).toLocaleDateString()}</p>
+                </div>
+            `;
+            return div;
+        }
+
+        // Function to handle location addition
+        function addLocation() {
+            const input = document.getElementById('location-input');
+            const location = input.value.trim();
+            
+            if (location) {
+                const locationList = document.getElementById('location-list');
+                const div = document.createElement('div');
+                div.className = 'flex justify-between items-center bg-gray-50 p-2 rounded';
+                div.innerHTML = `
+                    <span class="text-gray-700">${location}</span>
+                    <button class="text-red-500 hover:text-red-600">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                `;
+                locationList.appendChild(div);
+                input.value = '';
+            }
+        }
+
+        // Event Listeners
+        document.getElementById('add-location').addEventListener('click', addLocation);
+        document.getElementById('location-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') addLocation();
+        });
+
+        // Fetch warnings on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchActiveWarnings();
+            fetchHistoricalWarnings();
+            
+            // Fetch new warnings every 5 minutes
+            setInterval(() => {
+                fetchActiveWarnings();
+                fetchHistoricalWarnings();
+            }, 300000);
+        });
+
+        // Handle warning type checkboxes
+        const warningTypeCheckboxes = document.querySelectorAll('input[name="warning-type"]');
+        warningTypeCheckboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', async () => {
+                const checkedTypes = Array.from(warningTypeCheckboxes)
+                    .filter(cb => cb.checked)
+                    .map(cb => cb.value);
+                
+                try {
+                    await fetch('/api/preferences', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ warning_types: checkedTypes }),
+                    });
+                    fetchActiveWarnings();
+                } catch (error) {
+                    console.error('Error updating preferences:', error);
+                }
+            });
+        });
+    </script>
 </body>
 </html>
