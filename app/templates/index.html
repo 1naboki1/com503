@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InfoCal</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 1rem;
+            background-color: #4a90e2;
+            color: white;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+
+        .user-actions {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .main-content {
+            display: flex;
+            padding: 1rem;
+            gap: 1rem;
+            min-height: calc(100vh - 120px);
+        }
+
+        .panel {
+            background: white;
+            border-radius: 8px;
+            padding: 1rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .left-panel {
+            flex: 1;
+        }
+
+        .center-panel {
+            flex: 2;
+        }
+
+        .right-panel {
+            flex: 1;
+        }
+
+        .map {
+            height: 200px;
+            background-color: #ddd;
+            margin: 1rem 0;
+            border-radius: 4px;
+        }
+
+        .location-input {
+            width: 100%;
+            padding: 0.5rem;
+            margin-bottom: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .add-location-btn {
+            background-color: #4a90e2;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .location-list {
+            margin-top: 1rem;
+        }
+
+        .location-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .delete-btn {
+            background-color: #ff4444;
+            color: white;
+            border: none;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .settings-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .checkbox {
+            width: 18px;
+            height: 18px;
+        }
+
+        .footer {
+            background-color: #4a90e2;
+            color: white;
+            padding: 1rem;
+            text-align: center;
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+        }
+
+        .footer a {
+            color: white;
+            text-decoration: none;
+            margin: 0 1rem;
+        }
+
+        h3 {
+            margin-top: 0;
+            margin-bottom: 1rem;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">InfoCal</div>
+        <div class="user-actions">
+            <div class="settings-icon">⚙️</div>
+            <div class="profile-icon">👤</div>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="panel left-panel">
+            <h3>Karte und Orte</h3>
+            <input type="text" class="location-input" placeholder="Neuen Ort hinzufügen...">
+            <button class="add-location-btn">Ort hinzufügen</button>
+            <div class="map">[Karte hier]</div>
+            <div class="location-list">
+                <div class="location-item">
+                    <span>Wien</span>
+                    <button class="delete-btn">Löschen</button>
+                </div>
+                <div class="location-item">
+                    <span>Graz</span>
+                    <button class="delete-btn">Löschen</button>
+                </div>
+                <div class="location-item">
+                    <span>Salzburg</span>
+                    <button class="delete-btn">Löschen</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel center-panel">
+            <h3>Kalender</h3>
+            <div>[Kalender-UI hier]</div>
+        </div>
+
+        <div class="panel right-panel">
+            <h3>Einstellungen</h3>
+            <div class="settings">
+                <div class="settings-item">
+                    <span>🌐 Alle</span>
+                    <input type="checkbox" class="checkbox" checked>
+                </div>
+                <div class="settings-item">
+                    <span>💨 Wind</span>
+                    <input type="checkbox" class="checkbox">
+                </div>
+                <div class="settings-item">
+                    <span>🌧 Regen</span>
+                    <input type="checkbox" class="checkbox">
+                </div>
+                <div class="settings-item">
+                    <span>❄️ Schnee</span>
+                    <input type="checkbox" class="checkbox">
+                </div>
+                <div class="settings-item">
+                    <span>🧊 Glatteis</span>
+                    <input type="checkbox" class="checkbox">
+                </div>
+                <div class="settings-item">
+                    <span>⛈ Gewitter</span>
+                    <input type="checkbox" class="checkbox">
+                </div>
+                <div class="settings-item">
+                    <span>🔥 Hitze</span>
+                    <input type="checkbox" class="checkbox">
+                </div>
+                <div class="settings-item">
+                    <span>🥶 Kälte</span>
+                    <input type="checkbox" class="checkbox">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <a href="#">Impressum</a>
+        <a href="#">FAQ</a>
+        <a href="#">Rechtliche Hinweise</a>
+    </div>
+</body>
+</html>
