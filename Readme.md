@@ -7,6 +7,7 @@ This project is a Python application that can be run using Docker.
 ## Prerequisites
 
 - Docker installed on your machine
+- Docker Compose installed on your machine
 
 ## Installation
 
@@ -16,16 +17,11 @@ This project is a Python application that can be run using Docker.
     cd <repository-directory>
     ```
 
-2. Build the Docker image:
-    ```sh
-    docker build -t com503-app .
-    ```
-
 ## Running the Application
 
-1. Run the Docker container:
+1. Start the application using Docker Compose:
     ```sh
-    docker run -p 5000:5000 com503-app
+    docker-compose up --build
     ```
 
 2. The application will be accessible at `http://localhost:5000`.
