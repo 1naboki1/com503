@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, render_template
 from pymongo import MongoClient
 import os
 
@@ -10,10 +10,10 @@ client = MongoClient(mongodb_uri)
 db = client.myapp
 
 @app.route('/')
-def hello():
-    return jsonify({"message": "Hello from Docker!"})
+def home():
+    return render_template('index.html')
 
-@app.route('/items', methods=['GET'])
+@app.route('/api/items', methods=['GET'])
 def get_items():
     items = list(db.items.find({}, {'_id': False}))
     return jsonify(items)
