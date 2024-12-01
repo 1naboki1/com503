@@ -61,7 +61,7 @@ def create_app():
 
     # Initialize token manager
     token_manager = TokenManager(
-        logger=logger,  # Pass the already initialized logger
+        logger=logger,
         secret_key=os.environ.get('ENCRYPTION_KEY')
     )
 
@@ -72,17 +72,44 @@ def create_app():
     }
     token_manager.start_token_refresh_thread(db, google_config)
 
-    # Add a cleanup function
-    @app.teardown_appcontext
-    def cleanup(error):
-        """Cleanup resources"""
-        token_manager.stop_token_refresh_thread()
-
-    # OAuth 2 client setup
-    client = WebApplicationClient(GOOGLE_CLIENT_ID)
-
     # Initialize weather service
     weather_service = WeatherService(db)
+
+    def update_warnings_periodically():
+        """Background task to update warnings"""
+        logger.info("Starting periodic warning updates thread")
+        while True:
+            try:
+                start_time = datetime.utcnow()
+                logger.info(f"Running periodic warning update at {start_time}")
+                
+                warnings = weather_service.fetch_warnings()
+                logger.info(f"Fetch result: {'Successful' if warnings else 'No warnings received'}")
+                
+                if warnings:
+                    save_result = weather_service.save_warnings(warnings)
+                    if save_result:
+                        logger.info(f"Successfully updated warnings at {datetime.utcnow()}")
+                    else:
+                        logger.error("Failed to save warnings to database")
+                else:
+                    logger.warning("No warnings received from ZAMG API")
+                
+                # Calculate processing time and adjust sleep accordingly
+                processing_time = (datetime.utcnow() - start_time).total_seconds()
+                sleep_time = max(0, 300 - processing_time)  # Ensure 5-minute intervals
+                logger.info(f"Sleeping for {sleep_time} seconds until next update")
+                time.sleep(sleep_time)
+                
+            except Exception as e:
+                logger.error(f"Error in periodic update: {str(e)}", exc_info=True)
+                time.sleep(60)  # Wait a minute before retrying if there's an error
+
+    # Start the background task
+    logger.info("Initializing background update task...")
+    update_thread = threading.Thread(target=update_warnings_periodically, daemon=True)
+    update_thread.start()
+    logger.info("Background warning update thread started successfully")
 
     def login_required(f):
         @wraps(f)
@@ -116,39 +143,10 @@ def create_app():
             logger.error(f"Error fetching Google provider config: {str(e)}")
             return None
 
-    def update_warnings_periodically():
-        """Background task to update warnings"""
-        logger.info("Starting periodic warning updates thread")
-        retry_delay = 60  # Initial retry delay of 1 minute
-        max_retry_delay = 300  # Maximum retry delay of 5 minutes
-        
-        while True:
-            try:
-                start_time = datetime.utcnow()
-                logger.info(f"Running periodic warning update at {start_time}")
-                
-                warnings = weather_service.fetch_warnings()
-                if warnings:
-                    save_result = weather_service.save_warnings(warnings)
-                    if save_result:
-                        logger.info(f"Successfully updated warnings at {datetime.utcnow()}")
-                        retry_delay = 60  # Reset retry delay after successful update
-                    else:
-                        logger.error("Failed to save warnings to database")
-                else:
-                    logger.warning("No warnings received from ZAMG API")
-                
-                # Calculate processing time and adjust sleep accordingly
-                processing_time = (datetime.utcnow() - start_time).total_seconds()
-                sleep_time = max(0, 300 - processing_time)  # Ensure 5-minute intervals
-                logger.info(f"Sleeping for {sleep_time} seconds until next update")
-                time.sleep(sleep_time)
-                
-            except Exception as e:
-                logger.error(f"Error in periodic update at {datetime.utcnow()}: {str(e)}")
-                logger.info(f"Retrying in {retry_delay} seconds...")
-                time.sleep(retry_delay)
-                retry_delay = min(retry_delay * 2, max_retry_delay)  # Exponential backoff
+    @app.teardown_appcontext
+    def cleanup(error):
+        """Cleanup resources"""
+        token_manager.stop_token_refresh_thread()
 
     @app.before_request
     def before_request():
@@ -164,6 +162,9 @@ def create_app():
         if not request.path.startswith('/static/'):
             log_to_file(logger, f"Response: {response.status}")
         return response
+
+    # OAuth 2 client setup
+    client = WebApplicationClient(GOOGLE_CLIENT_ID)
 
     @app.route('/login')
     def login():
@@ -188,16 +189,11 @@ def create_app():
     def callback():
         """Handle Google OAuth callback"""
         try:
-            logger.info(f"Callback - Current request URL: {request.url}")
-            logger.info(f"Callback - Request headers: {dict(request.headers)}")
-            logger.info(f"Callback - Request args: {dict(request.args)}")
-            
             code = request.args.get("code")
             google_provider_cfg = get_google_provider_cfg()
             
             token_endpoint = google_provider_cfg["token_endpoint"]
             callback_uri = url_for('callback', _external=True, _scheme='https')
-            logger.info(f"Callback - Token request callback URI: {callback_uri}")
             
             token_url, headers, body = client.prepare_token_request(
                 token_endpoint,
@@ -205,9 +201,6 @@ def create_app():
                 redirect_url=callback_uri,
                 code=code
             )
-            logger.info(f"Callback - Token request URL: {token_url}")
-            logger.info(f"Callback - Token request headers: {headers}")
-            logger.info(f"Callback - Token request body: {body}")
             
             token_response = requests.post(
                 token_url,
@@ -215,18 +208,14 @@ def create_app():
                 data=body,
                 auth=(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET),
             )
-            logger.info(f"Callback - Token response status: {token_response.status_code}")
-            logger.info(f"Callback - Token response: {token_response.text}")
-            
+
             if token_response.status_code != 200:
                 logger.error(f"Token request failed: {token_response.text}")
                 return "Authentication failed.", 400
 
-            # Parse the tokens
             tokens = token_response.json()
             client.parse_request_body_response(token_response.text)
             
-            # Get user info
             userinfo_endpoint = google_provider_cfg["userinfo_endpoint"]
             uri, headers, body = client.add_token(userinfo_endpoint)
             userinfo_response = requests.get(uri, headers=headers)
@@ -236,7 +225,6 @@ def create_app():
                 return "Failed to get user info.", 400
 
             userinfo = userinfo_response.json()
-            logger.info(f"Callback - User info received: {userinfo}")
             
             if userinfo.get("email_verified"):
                 refresh_token = tokens.get('refresh_token')
@@ -251,35 +239,27 @@ def create_app():
                 }
                 
                 if refresh_token:
-                    # Encrypt refresh token
                     encrypted_refresh_token = token_manager.encrypt_token(refresh_token)
                     user_data['refresh_token'] = encrypted_refresh_token
                 
-                # Update or insert user data
                 result = db.users.update_one(
                     {'google_id': user_data['google_id']},
                     {
                         '$set': user_data,
-                        '$setOnInsert': {
-                            'created_at': datetime.utcnow()
-                        }
+                        '$setOnInsert': {'created_at': datetime.utcnow()}
                     },
                     upsert=True
                 )
-                logger.info(f"Callback - Database update result: {result.modified_count} documents modified")
                 
-                # Set session data
                 session['user'] = {
                     'id': userinfo["sub"],
                     'email': userinfo["email"],
                     'name': userinfo.get("given_name", "User"),
                     'session_token': session_token
                 }
-                logger.info("Callback - Session data set successfully")
                 
                 return redirect(url_for('home'))
             else:
-                logger.error("Email not verified by Google")
                 return "Email not verified by Google.", 400
                 
         except Exception as e:
@@ -291,7 +271,6 @@ def create_app():
         """Handle logout"""
         try:
             if 'user' in session:
-                # Invalidate session token in database
                 db.users.update_one(
                     {'google_id': session['user']['id']},
                     {'$unset': {'session_token': ""}}
@@ -360,16 +339,10 @@ def create_app():
 
     @app.route('/check-auth')
     def check_auth():
-        """Check if user is authenticated and refresh token if needed"""
+        """Check if user is authenticated"""
         if not is_authenticated():
             return jsonify({'authenticated': False}), 401
         return jsonify({'authenticated': True})
-
-    # Start background task if not in debug mode or if we are in the main thread
-    if not app.debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
-        update_thread = threading.Thread(target=update_warnings_periodically, daemon=True)
-        update_thread.start()
-        logger.info("Started background warning update thread")
 
     return app
 
