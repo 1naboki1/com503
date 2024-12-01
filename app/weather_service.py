@@ -5,6 +5,8 @@ from typing import Dict, List, Optional
 from logging_config import setup_logger
 from pymongo.collection import Collection
 from pymongo.database import Database
+from urllib3.util import Retry
+from requests.adapters import HTTPAdapter
 
 class WeatherService:
     def __init__(self, db: Database):
@@ -12,6 +14,99 @@ class WeatherService:
         self.db = db
         self.logger = setup_logger('weather_service', 'weather_service.log')
         self.setup_db_indexes()
+        self.setup_requests_session()
+        self.logger.info(f"WeatherService initialized with API URL: {self.api_url}")
+
+    def setup_requests_session(self) -> None:
+        """Setup requests session with retry logic"""
+        self.session = requests.Session()
+        
+        # Configure retry strategy
+        retry_strategy = Retry(
+            total=3,
+            backoff_factor=0.5,
+            status_forcelist=[500, 502, 503, 504],
+            allowed_methods=["GET"]
+        )
+        
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        self.session.mount("https://", adapter)
+        self.logger.info("Requests session configured with retry strategy")
+
+    def fetch_warnings(self) -> Optional[Dict]:
+        """Fetch warnings from ZAMG API"""
+        try:
+            self.logger.info(f"Starting API call to: {self.api_url}")
+            
+            # Use session for requests with retry logic
+            response = self.session.get(
+                self.api_url,
+                headers={
+                    'accept': 'application/json',
+                    'user-agent': 'Mozilla/5.0'
+                },
+                timeout=30
+            )
+            
+            # Detailed logging of the response
+            self.logger.info(f"API Response Status Code: {response.status_code}")
+            self.logger.info(f"API Response Headers: {dict(response.headers)}")
+            
+            # Log first part of response content for debugging
+            self.logger.debug(f"API Response Content (first 500 chars): {response.text[:500]}")
+            
+            if response.status_code == 204:
+                self.logger.info("No content returned from API (Status 204)")
+                return {'features': []}
+                
+            response.raise_for_status()
+            
+            try:
+                warnings = response.json()
+                if self.validate_warnings_format(warnings):
+                    self.logger.info(f"Successfully fetched {len(warnings.get('features', []))} warnings")
+                    return warnings
+                else:
+                    self.logger.error("Invalid warnings format received")
+                    self.logger.debug(f"Invalid response content: {response.text}")
+                    return None
+            except json.JSONDecodeError as e:
+                self.logger.error(f"JSON decode error: {str(e)}\nResponse content: {response.text[:500]}")
+                return None
+                
+        except requests.ConnectionError as e:
+            self.logger.error(f"Connection error while fetching warnings: {str(e)}")
+            return None
+        except requests.Timeout as e:
+            self.logger.error(f"Timeout while fetching warnings: {str(e)}")
+            return None
+        except requests.RequestException as e:
+            self.logger.error(f"Error fetching warnings: {str(e)}")
+            return None
+        except Exception as e:
+            self.logger.error(f"Unexpected error in fetch_warnings: {str(e)}", exc_info=True)
+            return None
+
+    def validate_warnings_format(self, warnings: Dict) -> bool:
+        """Validate the format of the warnings response"""
+        try:
+            if not isinstance(warnings, dict):
+                self.logger.error("Warnings response is not a dictionary")
+                return False
+            
+            if 'features' not in warnings:
+                self.logger.error("'features' key missing in warnings response")
+                return False
+                
+            if not isinstance(warnings['features'], list):
+                self.logger.error("'features' is not a list in warnings response")
+                return False
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error validating warnings format: {str(e)}")
+            return False
 
     def setup_db_indexes(self) -> None:
         """Setup MongoDB indexes for better query performance"""
